@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <malloc.h>
+#include <errno.h>
 
 static int quiet = 0;
 static int samba = 0;
@@ -61,6 +62,7 @@ char* join(char* path, char* name) {
 }
 
 int run(char *from, char *dest) {
+	struct stat st;
 	DIR *src;
 	struct dirent *e;
 	char *d_name;
@@ -74,8 +76,8 @@ int run(char *from, char *dest) {
 			printf("Internal error (asprintf)\n");
 		} else {
 			perror(s_err);
+			free(s_err);
 		}
-		free(s_err);
 		return 1;
 	}
 
@@ -91,23 +93,40 @@ int run(char *from, char *dest) {
 		dst_path = join(dest, d_name);
 
 		if (e->d_type == DT_DIR) {
-			if ( mkdir(dst_path, 0755) != 0) {
-				if (asprintf(&s_err, "Unable to create directory %s", dst_path) == -1) {
-					printf("Internal error (asprintf)\n");
+			if (lstat(dst_path, &st) == -1) {
+				if (errno != ENOENT) {
+					if (asprintf(&s_err, "Unable to stat %s", dst_path) == -1) {
+						fprintf(stderr, "Internal error (asprintf)\n");
+						perror("Unable to call lstat");
+					} else {
+						perror(s_err);
+						free(s_err);
+					}
+				} else if ( mkdir(dst_path, 0755) != 0 ) {
+					if (asprintf(&s_err, "Unable to create directory %s", dst_path) == -1) {
+						fprintf(stderr, "Internal error (asprintf)\n");
+						perror("Unable to create directory");
+					} else {
+						perror(s_err);
+						free(s_err);
+					}
 				} else {
-					perror(s_err);
+					run(src_path, dst_path);
 				}
-				free(s_err);
+			} else if (!S_ISDIR(st.st_mode)) {
+				fprintf(stderr, "'%s' already exists as a non-directory ; skipped'\n", dst_path);
+			} else {
+				run(src_path, dst_path);
 			}
-			run(src_path, dst_path);
 		} else if (e->d_type == DT_REG || e->d_type == DT_LNK) {
 			if (symlink(src_path, dst_path) != 0) {
 				if (asprintf(&s_err, "Unable to create symlink %s", dst_path) == -1) {
-					printf("Internal error (asprintf)\n");
+					fprintf(stderr, "Internal error (asprintf)\n");
+					perror("Unable to create symlink");
 				} else {
 					perror(s_err);
+					free(s_err);
 				}
-				free(s_err);
 			}
 		}
 		free(d_name);
@@ -156,7 +175,7 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	if (!S_ISDIR(st.st_mode)) {
-		printf("%s is not a directory !\n", from);
+		fprintf(stderr,"%s is not a directory !\n", from);
 		return 1;
 	}
 
@@ -166,11 +185,11 @@ int main(int argc, char *argv[]) {
 		return 1;
 	}
 	if (!S_ISDIR(st.st_mode)) {
-		printf("%s is not a directory !\n", dest);
+		fprintf(stderr,"%s is not a directory !\n", dest);
 		return 1;
 	}
 	if (access(dest, W_OK) == -1) {
-		printf("%s is not writeable !\n", dest);
+		fprintf(stderr, "%s is not writeable !\n", dest);
 		return 1;
 	}
 	return run(from, dest);
