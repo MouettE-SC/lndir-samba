@@ -6,6 +6,8 @@
 #include <dirent.h>
 #include <malloc.h>
 #include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
 
 static int quiet = 0;
 static int samba = 0;
@@ -144,7 +146,7 @@ int main(int argc, char *argv[]) {
 	char *from;
 	char *dest = NULL;
 	char *me = argv[0];
-	struct stat st;
+	struct stat st_from, st_dest;
 
 	while((opt = getopt(argc, argv, ":qs")) != -1) {
 		switch(opt) {
@@ -172,27 +174,31 @@ int main(int argc, char *argv[]) {
 	}
 
 	// From
-	if (lstat(from, &st) == -1) {
+	if (lstat(from, &st_from) == -1) {
 		perror("Unable to access source directory");
 		return 1;
 	}
-	if (!S_ISDIR(st.st_mode)) {
+	if (!S_ISDIR(st_from.st_mode)) {
 		fprintf(stderr,"%s is not a directory !\n", from);
 		return 1;
 	}
 
 	// To
-	if (lstat(dest, &st) == -1) {
+	if (lstat(dest, &st_dest) == -1) {
 		perror("Unable to access destination directory");
 		return 1;
 	}
-	if (!S_ISDIR(st.st_mode)) {
+	if (!S_ISDIR(st_dest.st_mode)) {
 		fprintf(stderr,"%s is not a directory !\n", dest);
+		return 1;
+	}
+	if (st_from.st_dev == st_dest.st_dev && st_from.st_ino == st_dest.st_ino) {
+		fprintf(stderr, "%s and %s identify the same directory !\n", from, dest);
 		return 1;
 	}
 	if (access(dest, W_OK) == -1) {
 		fprintf(stderr, "%s is not writeable !\n", dest);
 		return 1;
 	}
-	return run(from, dest);
+	return run(realpath(from, NULL), realpath(dest, NULL));
 }
