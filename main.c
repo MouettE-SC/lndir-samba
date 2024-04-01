@@ -25,10 +25,12 @@ char* destname(char* name) {
 	char *res;
 	char *end;
 	char *ext_start;
-	if (samba == 0)
-		return name;
 
 	res = strdup(name);
+
+	if (samba == 0)
+		return res;
+
 	if (samba == 1) {
 		replace_in(res, '<', '-');
 		replace_in(res, '>', '-');
@@ -73,7 +75,7 @@ int run(char *from, char *dest) {
 	src = opendir(from);
 	if (!src) {
 		if (asprintf(&s_err, "Unable to open source directory %s", from) == -1) {
-			printf("Internal error (asprintf)\n");
+			fprintf(stderr, "Internal error (asprintf)\n");
 		} else {
 			perror(s_err);
 			free(s_err);
