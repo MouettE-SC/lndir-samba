@@ -66,7 +66,7 @@ char* join(char* path, char* name) {
 }
 
 int run(char *from, char *dest) {
-	struct stat st;
+	struct stat st_from, st_dest;
 	DIR *src;
 	struct dirent *e;
 	char *d_name;
@@ -96,8 +96,22 @@ int run(char *from, char *dest) {
 		src_path = join(from, e->d_name);
 		dst_path = join(dest, d_name);
 
-		if (e->d_type == DT_DIR) {
-			if (lstat(dst_path, &st) == -1) {
+		if (lstat(src_path, &st_from) == -1) {
+			if (asprintf(&s_err, "Unable to stat %s", src_path) == -1) {
+				fprintf(stderr, "Internal error (asprintf)\n");
+				perror("Unable to call lstat");
+			} else {
+				perror(s_err);
+				free(s_err);
+			}
+			free(d_name);
+			free(src_path);
+			free(dst_path);
+			continue;
+		}
+
+		if (S_ISDIR(st_from.st_mode)) {
+			if (lstat(dst_path, &st_dest) == -1) {
 				if (errno != ENOENT) {
 					if (asprintf(&s_err, "Unable to stat %s", dst_path) == -1) {
 						fprintf(stderr, "Internal error (asprintf)\n");
@@ -117,12 +131,12 @@ int run(char *from, char *dest) {
 				} else {
 					run(src_path, dst_path);
 				}
-			} else if (!S_ISDIR(st.st_mode)) {
+			} else if (!S_ISDIR(st_dest.st_mode)) {
 				fprintf(stderr, "'%s' already exists as a non-directory ; skipped'\n", dst_path);
 			} else {
 				run(src_path, dst_path);
 			}
-		} else if (e->d_type == DT_REG || e->d_type == DT_LNK) {
+		} else if (S_ISREG(st_from.st_mode) || S_ISLNK(st_from.st_mode)) {
 			if (symlink(src_path, dst_path) != 0) {
 				if (asprintf(&s_err, "Unable to create symlink %s", dst_path) == -1) {
 					fprintf(stderr, "Internal error (asprintf)\n");
